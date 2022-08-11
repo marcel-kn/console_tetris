@@ -26,6 +26,9 @@ coord block[5];
 // Game over state
 bool game_over = false;
 
+// score counter
+int score = 0;
+
 // Render the field array and a frame
 void render(char field[][WIDTH])
 {
@@ -50,6 +53,8 @@ void render(char field[][WIDTH])
             }
         }
     }
+    move(HEIGHT+2,0);
+    printw("Score: %d", score);
 }
 
 // Initialize arrays (fill with spaces)
@@ -65,7 +70,7 @@ void init_array(char arr[][WIDTH])
 }
 
 // Check if there are intersections between the 
-// static field / the border and the block
+// static field / the top border and the block
 bool collision()
 {
     for (int i=0; i<4; i++)
@@ -100,17 +105,18 @@ void spawn_block()
     // initialize random seed:
     srand(time(NULL));
     // get random block template
-    int r = 10 * (rand() % 6); // random number (0,5) for offset
+    int r = 10 * (rand() % 7); // random number (0,6) for offset
 
     // array of all available blocks
     // the first 8 values are the occupied fields
     // followed by 2 values for the rotation center
-    int allblocks[60] = {0,0,0,1,0,2,0,3, 1,1, // a
+    int allblocks[70] = {0,0,0,1,0,2,0,3, 1,1, // a
                          0,0,0,1,1,0,1,1, 1,1, // b
                          0,0,0,1,1,1,1,2, 1,1, // c
                          0,1,0,2,1,0,1,1, 1,1, // d
                          0,0,1,0,1,1,1,2, 1,1, // e
                          0,1,1,0,1,1,1,2, 1,1, // f
+                         0,2,1,0,1,1,1,2, 1,1, // e_mirrored
                         };
 
     // initialize active block
@@ -174,7 +180,7 @@ void rotate_block(int dir)
         int y = block[i].y - block[4].y;
         
         // rotate 90 left
-        if (dir == 0)
+        if (dir == 1)
         {
             block[i].x = y + block[4].x;
             block[i].y = -x + block[4].y;
@@ -243,6 +249,8 @@ void update_field()
         {
             if (static_field[i][j] == symbols[0])
                 field[i][j] = symbols[0];
+            else
+                field[i][j] = symbols[2];
         }
     }
 
@@ -269,62 +277,72 @@ void delete_line(int nr)
 // check for lines in static_field
 void check_for_lines()
 {
-    bool clear = false;
-    while (!clear)
+    int score_count = 0;        // keep track of the num of lines removed
+    for (int i = HEIGHT-1; i>-1; i--)
     {
-        for (int i = HEIGHT-1; i>-1; i--)
+        int cnt = 0;
+        for (int j = 0; j<WIDTH; j++)
         {
-            int cnt = 0;
-            for (int j = 0; j<WIDTH; j++)
-            {
-                if (static_field[i][j] == symbols[2])
-                     cnt++;
-                else break;
-            }
-            if (cnt == WIDTH)
-            // Delete line
-            {
-
-                // Animation
-                for (int l=0; l<WIDTH; l++)
-                {
-                    field[i][l] = symbols[3];
-                }
-                //update_field();
-                render(field);
-                refresh();
-                usleep(50000);
-                for (int l=0; l<WIDTH; l++)
-                {
-                    field[i][l] = symbols[4];
-                }
-                //update_field();
-                render(field);
-                refresh();
-                usleep(50000);
-                for (int l=0; l<WIDTH; l++)
-                {
-                    field[i][l] = symbols[5];
-                }
-                //update_field();
-                render(field);
-                refresh();
-                usleep(50000);
-                // again old symbol but dont render
-                // fixes problem
-                for (int l=0; l<WIDTH; l++)
-                {
-                    field[i][l] = symbols[2];
-                }
-
-                delete_line(i);
-                break;
-            }
-            // reached top?
-            if (i == 0)
-                clear = true;
+            if (static_field[i][j] == symbols[2])
+                 cnt++;
+            else break;
         }
-        
+        if (cnt == WIDTH)
+        // Delete line
+        {
+            // Animation
+            for (int l=0; l<WIDTH; l++)
+            {
+                field[i][l] = symbols[3];
+            }
+            render(field);
+            refresh();
+            usleep(50000);
+            for (int l=0; l<WIDTH; l++)
+            {
+                field[i][l] = symbols[4];
+            }
+            render(field);
+            refresh();
+            usleep(50000);
+            for (int l=0; l<WIDTH; l++)
+            {
+                field[i][l] = symbols[5];
+            }
+            render(field);
+            refresh();
+            usleep(50000);
+            // again old symbol but dont render
+            // fixes problem
+            for (int l=0; l<WIDTH; l++)
+            {
+                field[i][l] = symbols[2];
+            }
+
+            delete_line(i);
+            // Look again at this line
+            i++;
+            score_count++;
+            continue;
+        }
+    }
+    if (score_count > 0)
+    {
+        switch(score_count)
+        {
+            case 1:
+                score += 40;
+                break;
+            case 2:
+                score += 100;
+                break;
+            case 3:
+                score += 300;
+                break;
+            case 4:
+                score += 1200;
+                break;
+        }
     }
 }
 
@@ -337,6 +355,9 @@ int main(int argc, char const *argv[])
     // initialize the screen
     // set up memory and clear screen
     initscr();
+
+    curs_set(0);
+    noecho();
 
     spawn_block();
 
@@ -358,16 +379,7 @@ int main(int argc, char const *argv[])
         // Timestep of the game 50ms
         usleep(50000);
 
-        // Move block down (and check)
-        if(time_count == game_speed)
-        {
-            if(!move_block_down())
-            {
-                check_for_lines();
-                spawn_block();
-            }
-            time_count = 0;
-        }
+
 
         // Handle if keys are pressed
         switch(getch()) {
@@ -378,7 +390,13 @@ int main(int argc, char const *argv[])
                     case 65:    // key up
                         break;
                     case 66:    // key down
-                        move_block_down();
+                        if(!move_block_down())
+                        {
+                            check_for_lines();
+                            spawn_block();
+                            //time_count = 0;
+                        }
+                        
                         break;
                     case 67:    // key right
                         move_block_side(1);
@@ -398,15 +416,32 @@ int main(int argc, char const *argv[])
                 break;
             }
 
-        
+        // Move block down (and check)
+        if(time_count == game_speed)
+        {
+            if(!move_block_down())
+            {
+                check_for_lines();
+                spawn_block();
+            }
+            time_count = 0;
+        }
 
         time_count++;
     }
 
-
-    //getch();  // wait for user input, return int-value of that key
-
+    move(HEIGHT+2,0);
+    printw("GAME OVER! Your score is: %d", score);
+    move(HEIGHT+3,0);
+    printw("Press q to quit");
+    // make getch() blocking
+    nodelay(stdscr,FALSE);
+    
+    while(getch() != 113)
+        continue;
+    
     endwin();   // deallocate memory and end ncurses
+
 
     return 0;
 }
